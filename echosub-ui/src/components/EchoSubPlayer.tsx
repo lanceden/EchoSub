@@ -3,92 +3,108 @@
 import React, { useEffect, useRef, useState } from "react"
 import ReactPlayer from "react-player"
 import { parseSync } from "subtitle"
+import DraggableSubtitlesOverlay from "./DraggableSubtitlesOverlay"
 
 type Subtitle = {
   start: number
   end: number
-  text: string
+  zh?: string
+  en?: string
 }
 
 interface Props {
   videoUrl: string
-  subtitleUrl: string // 預設雙語 SRT 路徑
+  subtitleUrl: string
 }
 
 export default function EchoSubPlayer({ videoUrl, subtitleUrl }: Props) {
   const [subtitles, setSubtitles] = useState<Subtitle[]>([])
-  const [currentSub, setCurrentSub] = useState("")
-  const playerRef = useRef<ReactPlayer | null>(null)
-  const [dragging, setDragging] = useState(false)
-  const [position, setPosition] = useState({ x: 100, y: 100 })
-  const offset = useRef({ x: 0, y: 0 })
+  const [currentSub, setCurrentSub] = useState<Subtitle | null>(null)
+  const [position, setPosition] = useState({ x: 0, y: 0 })
+  const playerRef = useRef<ReactPlayer>(null)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  // 👉 進入容器全螢幕
+  const goFullscreen = () => {
+    containerRef.current?.requestFullscreen?.()
+  }
 
   useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (dragging) {
-        setPosition({ x: e.clientX - offset.current.x, y: e.clientY - offset.current.y })
+    const handleFullscreenChange = () => {
+      if (containerRef.current) {
+        const { offsetWidth, offsetHeight } = containerRef.current
+        setPosition({
+          x: offsetWidth / 2 - 150,
+          y: offsetHeight - 140,
+        })
       }
     }
-    const handleMouseUp = () => setDragging(false)
 
-    window.addEventListener("mousemove", handleMouseMove)
-    window.addEventListener("mouseup", handleMouseUp)
+    document.addEventListener("fullscreenchange", handleFullscreenChange)
     return () => {
-      window.removeEventListener("mousemove", handleMouseMove)
-      window.removeEventListener("mouseup", handleMouseUp)
+      document.removeEventListener("fullscreenchange", handleFullscreenChange)
     }
-  }, [dragging])
+  }, [containerRef])
 
+  // 👉 載入 SRT 並做中英分行拆解
   useEffect(() => {
     fetch(subtitleUrl)
       .then((res) => res.text())
       .then((data) => {
         const parsed = parseSync(data).filter((e) => e.type === "cue")
-        setSubtitles(
-          parsed.map((e) => ({
+        const formatted = parsed.map((e: any) => {
+          const [zh, en] = e.data.text.split(/\r?\n/)
+          return {
             start: e.data.start,
             end: e.data.end,
-            text: e.data.text,
-          })) as Subtitle[]
-        )
+            zh: zh?.trim(),
+            en: en?.trim(),
+          }
+        })
+        setSubtitles(formatted)
       })
   }, [subtitleUrl])
 
+  // 👉 每秒檢查目前時間對應字幕
   const handleProgress = ({ playedSeconds }: { playedSeconds: number }) => {
-    const active = subtitles.find(
-      (s) => playedSeconds * 1000 >= s.start && playedSeconds * 1000 <= s.end
-    )
-    setCurrentSub(active ? active.text : "")
-  }
-
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    offset.current = { x: e.clientX - position.x, y: e.clientY - position.y }
-    setDragging(true)
+    const now = playedSeconds * 1000
+    const active = subtitles.find((s) => now >= s.start && now <= s.end)
+    setCurrentSub(active || null)
   }
 
   return (
-    <div className="w-full max-w-screen-lg mx-auto px-4 mt-8 space-y-4">
+    <div
+      ref={containerRef}
+      className="relative aspect-video w-full max-w-5xl mx-auto">
       <ReactPlayer
         key={videoUrl}
         url={videoUrl}
         controls
         ref={playerRef}
         width="100%"
-        height="500px" // 固定高度，與 YouTube 播放器在桌面上的常見高度一致
-        className="react-player"
+        height="100%"
         onProgress={handleProgress}
-        config={{
-          youtube: {
-            playerVars: { showinfo: 1 },
-          },
-        }}
+        className="react-player"
+        wrapperClassName="relative w-full h-full"
+        config={{ youtube: { playerVars: { showinfo: 1 } } }}
       />
-      <div
-        className="p-4 bg-black text-white text-center text-xl rounded-lg cursor-move fixed"
-        style={{ left: position.x, top: position.y, width: "fit-content" }}
-        onMouseDown={handleMouseDown}
-      >
-        {currentSub}
+
+      {/* 字幕顯示區 */}
+      {currentSub && (
+        <DraggableSubtitlesOverlay
+          zh={currentSub.zh}
+          en={currentSub.en}
+          containerRef={containerRef}
+        />
+      )}
+
+      {/* 全螢幕控制按鈕 */}
+      <div className="absolute top-2 right-2 z-10">
+        <button
+          className="bg-teal-500 text-white px-4 py-1 text-sm rounded hover:bg-teal-600 transition"
+          onClick={goFullscreen}>
+          全螢幕
+        </button>
       </div>
     </div>
   )

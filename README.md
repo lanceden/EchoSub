@@ -48,7 +48,7 @@ pip install torch transformers ctranslate2 opencc-python-reimplemented
 
 2. 執行字幕合併與翻譯：
 ```bash
-python scripts/merge_vtt_to_bilingual_srt.py
+python scripts/merge_vtt_to_bilingual_srt.py --input ./public/demo.vtt --output ./public/demo.srt
 ```
 
 3. 預設會讀取 `subtitles-en.vtt` 並輸出為 `translated_bilingual_semantic.srt`

@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+youtube-transcript-api
+transformers
+torch
+python-multipart
+opencc-python-reimplemented
+sentencepiece
+accelerate
